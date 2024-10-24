@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .input-container {
+      margin-bottom: 10px;
+    }
+    input[type="text"] {
+      width: 300px;
+      padding: 8px;
+      margin-right: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    select {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+    }
+    .calendar-section {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+    }
+    button {
+      padding: 8px 15px;
+      margin: 5px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: none;
+      transition: background-color 0.3s;
+    }
+    .remove-btn {
+      color: white;
+      background-color: #dc3545;
+    }
+    .remove-btn:hover {
+      background-color: #c82333;
+    }
+    .action-btn {
+      margin: 10px 5px;
+    }
+    .delete-btn {
+      background-color: #ff4444;
+      color: white;
+    }
+    .delete-btn:hover {
+      background-color: #cc0000;
+    }
+    .create-btn {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .create-btn:hover {
+      background-color: #45a049;
+    }
+    .add-btn {
+      background-color: #008CBA;
+      color: white;
+    }
+    .add-btn:hover {
+      background-color: #007399;
+    }
+    #status {
+      margin-top: 20px;
+      padding: 10px;
+      display: none;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .loading {
+      display: none;
+      margin: 10px 0;
+      color: #666;
+    }
+    .button-container {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .divider {
+      margin: 20px 0;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <h2>循環行事曆建立器</h2>
+  
+  <div class="calendar-section">
+    <label for="calendarSelect"><strong>選擇行事曆：</strong></label>
+    <select id="calendarSelect">
+      <option value="">載入中...</option>
+    </select>
+  </div>
+  
+  <p>請輸入每週事件名稱，系統將自動建立週一至週五的事件：</p>
+  
+  <div id="inputs">
+    <div class="input-container">
+      <input type="text" class="event-name" placeholder="請輸入事件名稱">
+      <button class="remove-btn" onclick="removeInput(this)">刪除</button>
+    </div>
+  </div>
+  
+  <div class="button-container">
+    <button class="add-btn" onclick="addNewInput()">新增輸入欄位</button>
+    <button class="create-btn" onclick="checkPermissionAndSubmit()">建立事件</button>
+    <button class="delete-btn" onclick="deleteAutoCreatedEvents()">刪除自動建立的事件</button>
+  </div>
+  
+  <div id="loading" class="loading">處理中，請稍候...</div>
+  <div id="status"></div>
+
+  <script>
+    // 載入可用的日曆列表
+    window.onload = function() {
+      google.script.run
+        .withSuccessHandler(function(calendars) {
+          const select = document.getElementById('calendarSelect');
+          select.innerHTML = '';
+          
+          if (calendars.length === 0) {
+            select.innerHTML = '<option value="">無可用的日曆</option>';
+            return;
+          }
+          
+          calendars.forEach(function(calendar) {
+            const option = document.createElement('option');
+            option.value = calendar.id;
+            option.textContent = calendar.name + ' (擁有者)';
+            select.appendChild(option);
+          });
+        })
+        .withFailureHandler(function(error) {
+          showStatus('載入日曆列表失敗：' + error, true);
+        })
+        .getAvailableCalendars();
+    };
+
+    function addNewInput() {
+      const container = document.createElement('div');
+      container.className = 'input-container';
+      container.innerHTML = `
+        <input type="text" class="event-name" placeholder="請輸入事件名稱">
+        <button class="remove-btn" onclick="removeInput(this)">刪除</button>
+      `;
+      document.getElementById('inputs').appendChild(container);
+    }
+    
+    function removeInput(button) {
+      const inputContainers = document.getElementsByClassName('input-container');
+      if (inputContainers.length > 1) {
+        button.parentElement.remove();
+      } else {
+        showStatus('至少需要保留一個輸入欄位', true);
+      }
+    }
+    
+    function showStatus(message, isError = false) {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.style.display = 'block';
+      status.className = isError ? 'error' : 'success';
+      document.getElementById('loading').style.display = 'none';
+    }
+    
+    function checkPermissionAndSubmit() {
+      const calendarId = document.getElementById('calendarSelect').value;
+      if (!calendarId) {
+        showStatus('請選擇一個行事曆', true);
+        return;
+      }
+      
+      document.getElementById('loading').style.display = 'block';
+      
+      google.script.run
+        .withSuccessHandler(function(hasPermission) {
+          if (hasPermission) {
+            submitEvents();
+          } else {
+            showStatus('需要日曆存取權限，請確認權限設定。', true);
+          }
+        })
+        .withFailureHandler(function(error) {
+          showStatus('檢查權限時發生錯誤：' + error, true);
+        })
+        .checkCalendarPermissions();
+    }
+    
+    function submitEvents() {
+      const calendarId = document.getElementById('calendarSelect').value;
+      const inputs = document.getElementsByClassName('event-name');
+      const eventNames = Array.from(inputs).map(input => input.value);
+      
+      if (eventNames.every(name => name.trim() === '')) {
+        showStatus('請至少輸入一個事件名稱', true);
+        return;
+      }
+      
+      document.getElementById('loading').style.display = 'block';
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          showStatus(result);
+        })
+        .withFailureHandler(function(error) {
+          showStatus(error.toString(), true);
+        })
+        .createRecurringEvents(eventNames, calendarId);
+    }
+
+    function deleteAutoCreatedEvents() {
+      const calendarId = document.getElementById('calendarSelect').value;
+      if (!calendarId) {
+        showStatus('請選擇一個行事曆', true);
+        return;
+      }
+      
+      if (confirm('確定要刪除選定行事曆中所有自動建立的事件嗎？')) {
+        document.getElementById('loading').style.display = 'block';
+        
+        google.script.run
+          .withSuccessHandler(function(result) {
+            showStatus(result);
+          })
+          .withFailureHandler(function(error) {
+            showStatus(error.toString(), true);
+          })
+          .removeAutoCreatedEvents(calendarId);
+      }
+    }
+  </script>
+</body>
+</html>
