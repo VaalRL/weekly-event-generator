@@ -2,6 +2,8 @@
 
 這是一個 Google Apps Script 專案，可以幫助使用者在 Google 日曆中自動建立週期性事件。
 
+[English](./Readme_eng.md) | [繁體中文](./Readme.md)
+
 ## 支持這個專案
 
 如果您覺得這個專案對您有幫助，可以請我喝杯咖啡！
